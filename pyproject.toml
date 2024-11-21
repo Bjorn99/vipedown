@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "ytdl-gui"
+version = "0.1.0"
+description = "\"A modern GUI frontend for yt-dlp\""
+authors = ["Bjorn99 <67769176+Bjorn99@users.noreply.github.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "ytdl_gui"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pyqt6 = "^6.7.1"
+yt-dlp = "^2024.11.18"
+python-slugify = "^8.0.4"
+validators = "^0.34.0"
+pytest = "^8.3.3"
+requests = "^2.32.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.poetry.scripts]
+ytdl-gui = "ytdl_gui.main:main"
+
