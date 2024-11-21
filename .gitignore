@@ -396,3 +396,45 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Python bytecode files
+__pycache__/
+*.py[cod]
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE and editor specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Configuration files
+*.json
+*.yaml
+
+# Temporary files
+tmp/
+temp/
+
+# User specific files
+*.pkl  # Pickle files if used for caching or data storage
