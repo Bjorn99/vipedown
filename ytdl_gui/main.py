@@ -1,333 +1,495 @@
 import sys
 import os
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
+from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QLabel, QLineEdit, QPushButton, QFileDialog, QComboBox, 
     QTextEdit, QMessageBox, QCheckBox, QButtonGroup, QRadioButton,
-    QStackedWidget, QStyle
+    QStackedWidget, QStyle, QProgressBar, QSystemTrayIcon, QMenu,
+    QSpinBox, QGroupBox, QScrollArea
 )
-from PyQt6.QtCore import QThread, pyqtSignal, Qt, QSettings
-from PyQt6.QtGui import QFont, QIcon, QColor, QPalette
 
+from .settings_dialog import SettingsDialog
+from .download_worker import EnhancedDownloadWorker, DownloadConfig
+
+from PyQt6.QtCore import QThread, pyqtSignal, Qt, QSettings, QTimer, QSize
+from PyQt6.QtGui import QFont, QIcon, QColor, QPalette, QAction, QPixmap
+
+import yt_dlp
 from validators import url as validate_url
 from slugify import slugify
 
-import yt_dlp
 
-class ThemeManager:
-    """Manages application themes"""
+@dataclass
+class ModernThemeManager:
+    """Enhanced theme manager with modern color schemes"""
+    THEMES = {
+        'light': {
+            'window': QColor("#FFFFFF"),
+            'text': QColor("#2C3E50"),
+            'accent': QColor("#3498DB"),
+            'button': QColor("#ECF0F1"),
+            'button_hover': QColor("#BDC3C7"),
+            'progress': QColor("#2ECC71"),
+            'error': QColor("#E74C3C")
+        },
+        'dark': {
+            'window': QColor("#2C3E50"),
+            'text': QColor("#ECF0F1"),
+            'accent': QColor("#3498DB"),
+            'button': QColor("#34495E"),
+            'button_hover': QColor("#2980B9"),
+            'progress': QColor("#27AE60"),
+            'error': QColor("#C0392B")
+        },
+        'nord': {
+            'window': QColor("#2E3440"),
+            'text': QColor("#ECEFF4"),
+            'accent': QColor("#88C0D0"),
+            'button': QColor("#3B4252"),
+            'button_hover': QColor("#4C566A"),
+            'progress': QColor("#A3BE8C"),
+            'error': QColor("#BF616A")
+        }
+    }
+
     def __init__(self):
         self.settings = QSettings('YTDLPGui', 'ThemeSettings')
         self._current_theme = self.settings.value('theme', 'light')
 
-    def get_palette(self, theme: str = None) -> QPalette:
-        """Generate color palette based on theme"""
-        theme = theme or self._current_theme
+    def get_palette(self, theme_name: str = None) -> QPalette:
+        """Generate enhanced color palette"""
+        theme_name = theme_name or self._current_theme
+        theme = self.THEMES[theme_name]
         palette = QPalette()
 
-        if theme == 'dark':
-            # Dark theme colors
-            palette.setColor(QPalette.ColorRole.Window, QColor(53, 53, 53))
-            palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.white)
-            palette.setColor(QPalette.ColorRole.Base, QColor(25, 25, 25))
-            palette.setColor(QPalette.ColorRole.AlternateBase, QColor(53, 53, 53))
-            palette.setColor(QPalette.ColorRole.ToolTipBase, Qt.GlobalColor.white)
-            palette.setColor(QPalette.ColorRole.ToolTipText, Qt.GlobalColor.white)
-            palette.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.white)
-            palette.setColor(QPalette.ColorRole.Button, QColor(53, 53, 53))
-            palette.setColor(QPalette.ColorRole.ButtonText, Qt.GlobalColor.white)
-            palette.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.red)
-            palette.setColor(QPalette.ColorRole.Link, QColor(42, 130, 218))
-            palette.setColor(QPalette.ColorRole.Highlight, QColor(42, 130, 218))
-            palette.setColor(QPalette.ColorRole.HighlightedText, Qt.GlobalColor.black)
-        else:
-            # Light theme (default system palette)
-            palette = QApplication.style().standardPalette()
+        # Set colors for various UI elements
+        palette.setColor(QPalette.ColorRole.Window, theme['window'])
+        palette.setColor(QPalette.ColorRole.WindowText, theme['text'])
+        palette.setColor(QPalette.ColorRole.Base, theme['window'].darker(110))
+        palette.setColor(QPalette.ColorRole.AlternateBase, theme['window'].darker(120))
+        palette.setColor(QPalette.ColorRole.Text, theme['text'])
+        palette.setColor(QPalette.ColorRole.Button, theme['button'])
+        palette.setColor(QPalette.ColorRole.ButtonText, theme['text'])
+        palette.setColor(QPalette.ColorRole.Highlight, theme['accent'])
+        palette.setColor(QPalette.ColorRole.HighlightedText, theme['text'])
 
         return palette
 
-    def toggle_theme(self, app: QApplication) -> str:
-        """Toggle between light and dark themes"""
-        current_theme = self.settings.value('theme', 'light')
-        new_theme = 'dark' if current_theme == 'light' else 'light'
+    def cycle_theme(self, app: QApplication) -> str:
+        """Cycle through available themes"""
+        themes = list(self.THEMES.keys())
+        current_idx = themes.index(self._current_theme)
+        new_theme = themes[(current_idx + 1) % len(themes)]
         
-        # Save theme preference
         self.settings.setValue('theme', new_theme)
-        
-        # Apply new palette
+        self._current_theme = new_theme
         app.setPalette(self.get_palette(new_theme))
         
         return new_theme
 
-class VideoDownloadWorker(QThread):
-    """Background worker for downloading videos"""
-    progress_signal = pyqtSignal(str)
-    download_complete = pyqtSignal(bool)
-
-    def __init__(self, url: str, save_path: str, format_options: Dict):
-        super().__init__()
-        self.url = url
-        self.save_path = Path(save_path)
-        self.format_options = format_options
-        self.is_cancelled = False
-
-    def run(self):
-        """Perform the download in a separate thread"""
-        try:
-            # Sanitize filename template
-            output_template = str(self.save_path / '%(title)s-%(id)s.%(ext)s')
-            
-            # Configure ydl options based on format selection
-            ydl_opts = {
-                'outtmpl': output_template,
-                'progress_hooks': [self.progress_hook],
-                'quiet': True,
-                'no_warnings': True,
-                'restrictfilenames': True
-            }
-
-            # Customize format based on user selection
-            format_key = self.format_options.get('type', 'video')
-            quality = self.format_options.get('quality', 'best')
-
-            # Build format string dynamically
-            if format_key == 'video':
-                # Map quality to format
-                quality_map = {
-                    'low': 'worstvideo[height<=360]+worstaudio/worst',
-                    'medium': 'bestvideo[height<=720]+bestaudio/best[height<=720]',
-                    'high': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
-                    'best': 'bestvideo+bestaudio/best'
-                }
-                ydl_opts['format'] = quality_map.get(quality, quality_map['best'])
-            
-            elif format_key == 'audio':
-                # Audio extraction options
-                audio_formats = {
-                    'mp3': {'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'},
-                    'wav': {'key': 'FFmpegExtractAudio', 'preferredcodec': 'wav'},
-                    'm4a': {'key': 'FFmpegExtractAudio', 'preferredcodec': 'm4a'}
-                }
-                
-                ydl_opts['format'] = 'bestaudio/best'
-                ydl_opts['postprocessors'] = [{
-                    **audio_formats.get(quality, audio_formats['mp3'])
-                }]
-
-            # Verify save path exists and is writable
-            if not self.save_path.exists():
-                self.save_path.mkdir(parents=True, exist_ok=True)
-            
-            if not os.access(str(self.save_path), os.W_OK):
-                raise PermissionError(f"No write permission for directory: {self.save_path}")
-
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([self.url])
-            
-            self.download_complete.emit(True)
-        except Exception as e:
-            self.progress_signal.emit(f"Download error: {str(e)}")
-            self.download_complete.emit(False)
-
-    def progress_hook(self, d: dict):
-        """Update progress during download"""
-        if self.is_cancelled:
-            raise Exception("Download cancelled by user")
-            
-        if d['status'] == 'downloading':
-            p = d.get('_percent_str', 'N/A')
-            speed = d.get('speed', 0)
-            if speed:
-                speed_str = f"{speed/1024/1024:.1f} MB/s"
-            else:
-                speed_str = "N/A"
-            self.progress_signal.emit(f"Downloading: {p} (Speed: {speed_str})")
-        elif d['status'] == 'finished':
-            self.progress_signal.emit("Processing download...")
-
-class YTDLPFrontend(QMainWindow):
+class ModernYTDLPFrontend(QMainWindow):
+    """Modern and feature-rich yt-dlp frontend"""
     def __init__(self):
         super().__init__()
-        self.download_worker: Optional[VideoDownloadWorker] = None
-        self.theme_manager = ThemeManager()
+        self.download_worker = None
+        self.theme_manager = ModernThemeManager()
+        self.settings = QSettings('YTDLPGui', 'AppSettings')
         self.init_ui()
+        self.setup_tray()
         
-        # Apply initial theme
+        # Apply saved theme
         app = QApplication.instance()
         app.setPalette(self.theme_manager.get_palette())
 
     def init_ui(self):
-        """Initialize the user interface"""
-        self.setWindowTitle("YT-DLP Downloader")
-        self.setGeometry(100, 100, 700, 600)
+        """Initialize modern user interface"""
+        self.setWindowTitle("Modern YT-DLP Downloader")
+        self.setGeometry(100, 100, 800, 700)
+        self.setWindowIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown))
 
-        # Main container
+        # Main container with scroll area
         main_widget = QWidget()
+        main_scroll = QScrollArea()
+        main_scroll.setWidget(main_widget)
+        main_scroll.setWidgetResizable(True)
+        self.setCentralWidget(main_scroll)
+
         main_layout = QVBoxLayout()
         main_widget.setLayout(main_layout)
-        self.setCentralWidget(main_widget)
 
-        # Theme Toggle Button
-        self.theme_button = QPushButton("🌓 Toggle Theme")
-        self.theme_button.clicked.connect(self.toggle_theme)
-        main_layout.addWidget(self.theme_button)
+        # Modern toolbar
+        toolbar = self.create_toolbar()
+        main_layout.addWidget(toolbar)
 
-        # URL Input
+        # URL input with paste button
+        url_group = QGroupBox("Video URL")
         url_layout = QHBoxLayout()
-        url_label = QLabel("YouTube URL:")
         self.url_input = QLineEdit()
-        self.url_input.setPlaceholderText("Enter video URL...")
-        url_layout.addWidget(url_label)
+        self.url_input.setPlaceholderText("Enter video or playlist URL...")
+        paste_button = QPushButton("📋")
+        paste_button.clicked.connect(self.paste_url)
         url_layout.addWidget(self.url_input)
-        main_layout.addLayout(url_layout)
+        url_layout.addWidget(paste_button)
+        url_group.setLayout(url_layout)
+        main_layout.addWidget(url_group)
 
-        # Download Type and Quality
-        type_quality_layout = QHBoxLayout()
-
-        # Type Selection
-        type_group = QButtonGroup(self)
+        # Download options
+        options_group = QGroupBox("Download Options")
+        options_layout = QVBoxLayout()
+        
+        # Format selection
+        format_layout = QHBoxLayout()
         self.video_radio = QRadioButton("Video")
         self.audio_radio = QRadioButton("Audio")
-        type_group.addButton(self.video_radio)
-        type_group.addButton(self.audio_radio)
-        self.video_radio.setChecked(True)
-
-        # Quality Selection
         self.quality_combo = QComboBox()
-        self.update_quality_options()
+        format_layout.addWidget(QLabel("Type:"))
+        format_layout.addWidget(self.video_radio)
+        format_layout.addWidget(self.audio_radio)
+        format_layout.addWidget(QLabel("Quality:"))
+        format_layout.addWidget(self.quality_combo)
+        options_layout.addLayout(format_layout)
         
-        # Connect type radio buttons to update quality options
-        self.video_radio.toggled.connect(self.update_quality_options)
-        
-        type_quality_layout.addWidget(QLabel("Type:"))
-        type_quality_layout.addWidget(self.video_radio)
-        type_quality_layout.addWidget(self.audio_radio)
-        type_quality_layout.addWidget(QLabel("Quality:"))
-        type_quality_layout.addWidget(self.quality_combo)
-        main_layout.addLayout(type_quality_layout)
+        # Playlist options
+        playlist_layout = QHBoxLayout()
+        self.playlist_check = QCheckBox("Download Playlist")
+        self.start_index = QSpinBox()
+        self.end_index = QSpinBox()
+        self.start_index.setRange(1, 9999)
+        self.end_index.setRange(1, 9999)
+        self.start_index.setValue(1)
+        playlist_layout.addWidget(self.playlist_check)
+        playlist_layout.addWidget(QLabel("Start:"))
+        playlist_layout.addWidget(self.start_index)
+        playlist_layout.addWidget(QLabel("End:"))
+        playlist_layout.addWidget(self.end_index)
+        options_layout.addLayout(playlist_layout)
 
-        # Download Path
+        # Additional options
+        extra_layout = QHBoxLayout()
+        self.thumbnail_check = QCheckBox("Download Thumbnail")
+        self.metadata_check = QCheckBox("Save Metadata")
+        self.subtitle_check = QCheckBox("Download Subtitles")
+        self.subtitle_combo = QComboBox()
+        self.subtitle_combo.addItems(['en', 'es', 'fr', 'de', 'it', 'pt', 'all'])
+        self.subtitle_combo.setEnabled(False)
+        extra_layout.addWidget(self.thumbnail_check)
+        extra_layout.addWidget(self.metadata_check)
+        extra_layout.addWidget(self.subtitle_check)
+        extra_layout.addWidget(self.subtitle_combo)
+        options_layout.addLayout(extra_layout)
+        
+        options_group.setLayout(options_layout)
+        main_layout.addWidget(options_group)
+
+        # Save path selection
+        path_group = QGroupBox("Save Location")
         path_layout = QHBoxLayout()
-        path_label = QLabel("Save Path:")
         self.path_input = QLineEdit()
         self.path_input.setText(str(Path.home() / "Downloads"))
-        self.path_input.setReadOnly(True)
-        path_button = QPushButton("Browse")
-        path_button.clicked.connect(self.select_download_path)
-        path_layout.addWidget(path_label)
+        browse_button = QPushButton("Browse")
+        browse_button.clicked.connect(self.select_download_path)
         path_layout.addWidget(self.path_input)
-        path_layout.addWidget(path_button)
-        main_layout.addLayout(path_layout)
+        path_layout.addWidget(browse_button)
+        path_group.setLayout(path_layout)
+        main_layout.addWidget(path_group)
 
-        # Download Button
-        self.download_button = QPushButton("Download")
-        self.download_button.clicked.connect(self.start_download)
-        main_layout.addWidget(self.download_button)
-
-        # Progress Log
+        # Progress section
+        progress_group = QGroupBox("Download Progress")
+        progress_layout = QVBoxLayout()
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("%p% - %v/%m MB")
+        
+        self.status_label = QLabel("Ready")
         self.progress_log = QTextEdit()
         self.progress_log.setReadOnly(True)
-        main_layout.addWidget(self.progress_log)
+        self.progress_log.setMaximumHeight(150)
+        
+        progress_layout.addWidget(self.progress_bar)
+        progress_layout.addWidget(self.status_label)
+        progress_layout.addWidget(self.progress_log)
+        progress_group.setLayout(progress_layout)
+        main_layout.addWidget(progress_group)
+
+        # Control buttons
+        button_layout = QHBoxLayout()
+        self.download_button = QPushButton("Start Download")
+        self.download_button.clicked.connect(self.start_download)
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.cancel_download)
+        self.cancel_button.setEnabled(False)
+        button_layout.addWidget(self.download_button)
+        button_layout.addWidget(self.cancel_button)
+        main_layout.addLayout(button_layout)
+
+        # Connect signals
+        self.video_radio.toggled.connect(self.update_quality_options)
+        self.subtitle_check.toggled.connect(self.subtitle_combo.setEnabled)
+        self.playlist_check.toggled.connect(self.toggle_playlist_options)
+        
+        # Set initial state
+        self.video_radio.setChecked(True)
+        self.update_quality_options()
+        self.load_settings()
+
+    def create_toolbar(self) -> QWidget:
+        """Creating a modern toolbar"""
+        toolbar = QWidget()
+        toolbar_layout = QHBoxLayout()
+        toolbar_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Theme button
+        self.theme_button = QPushButton("🎨 Theme")
+        self.theme_button.clicked.connect(self.cycle_theme)
+        
+        # Settings button
+        settings_button = QPushButton("⚙️ Settings")
+        settings_button.clicked.connect(self.show_settings)
+        
+        # Help button
+        help_button = QPushButton("❔ Help")
+        help_button.clicked.connect(self.show_help)
+
+        toolbar_layout.addWidget(self.theme_button)
+        toolbar_layout.addWidget(settings_button)
+        toolbar_layout.addWidget(help_button)
+        toolbar_layout.addStretch()
+
+        toolbar.setLayout(toolbar_layout)
+        return toolbar
+
+    def setup_tray(self):
+        """Setup system tray icon and menu"""
+        self.tray_icon = QSystemTrayIcon(self)
+        self.tray_icon.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown))
+        
+        tray_menu = QMenu()
+        show_action = tray_menu.addAction("Show")
+        show_action.triggered.connect(self.show)
+        quit_action = tray_menu.addAction("Quit")
+        quit_action.triggered.connect(QApplication.instance().quit)
+        
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.show()
+
+    def load_settings(self):
+        """Load saved application settings"""
+        self.path_input.setText(self.settings.value('save_path', str(Path.home() / "Downloads")))
+        self.metadata_check.setChecked(self.settings.value('save_metadata', True, type=bool))
+        self.thumbnail_check.setChecked(self.settings.value('save_thumbnail', False, type=bool))
+
+    def save_settings(self):
+        """Save application settings"""
+        self.settings.setValue('save_path', self.path_input.text())
+        self.settings.setValue('save_metadata', self.metadata_check.isChecked())
+        self.settings.setValue('save_thumbnail', self.thumbnail_check.isChecked())
+
+    def toggle_playlist_options(self, enabled: bool):
+        """Enable/disable playlist-specific options"""
+        self.start_index.setEnabled(enabled)
+        self.end_index.setEnabled(enabled)
 
     def update_quality_options(self):
         """Update quality options based on selected type"""
         self.quality_combo.clear()
         if self.video_radio.isChecked():
             self.quality_combo.addItems([
-                'Best Quality', 
-                'High (1080p)', 
-                'Medium (720p)', 
+                'Maximum Quality (8K/4K)',
+                'Ultra HD (2160p)',
+                'Quad HD (1440p)',
+                'Full HD (1080p)',
+                'HD (720p)',
+                'SD (480p)',
                 'Low (360p)'
             ])
         else:
             self.quality_combo.addItems([
-                'MP3', 
-                'WAV', 
-                'M4A'
+                'FLAC (Lossless)',
+                'WAV (Lossless)',
+                'OPUS (High Quality)',
+                'M4A (AAC)',
+                'MP3 (320kbps)',
+                'MP3 (256kbps)',
+                'MP3 (192kbps)',
+                'MP3 (128kbps)'
             ])
 
-    def toggle_theme(self):
-        """Toggle application theme"""
+    def cycle_theme(self):
+        """Cycle through available themes"""
         app = QApplication.instance()
-        theme = self.theme_manager.toggle_theme(app)
-        self.progress_log.append(f"Switched to {theme} theme")
+        new_theme = self.theme_manager.cycle_theme(app)
+        self.status_label.setText(f"Theme changed to {new_theme}")
+
+    def paste_url(self):
+        """Paste URL from clipboard"""
+        clipboard = QApplication.clipboard()
+        self.url_input.setText(clipboard.text())
 
     def select_download_path(self):
-        """Open file dialog to select download directory"""
+        """Select download directory"""
         path = QFileDialog.getExistingDirectory(
             self,
             "Select Download Directory",
-            str(Path.home()),
+            self.path_input.text(),
             QFileDialog.Option.ShowDirsOnly
         )
         if path:
             self.path_input.setText(path)
+            self.save_settings()
+
+    def show_settings(self):
+        """Show settings dialog"""
+        settings_dialog = SettingsDialog(self)
+        if settings_dialog.exec():
+            # Reload settings if dialog was accepted
+            self.load_settings()
+
+    def show_help(self):
+        """Show help information"""
+        help_text = """
+        Modern YT-DLP Downloader Help
+
+        1. Enter a video or playlist URL
+        2. Select download type (video/audio) and quality
+        3. Configure additional options if needed
+        4. Choose save location
+        5. Click 'Start Download'
+
+        Supported platforms: YouTube, Vimeo, and many more.
+        For more information, visit: https://github.com/yt-dlp/yt-dlp
+        """
+        QMessageBox.information(self, "Help", help_text)
 
     def start_download(self):
-        """Initiate the download process"""
+        """Start the download process"""
         url = self.url_input.text().strip()
-        save_path = self.path_input.text().strip()
+        save_path = Path(self.path_input.text().strip())
 
-        # Validate URL
+        # Validate inputs
         if not url or not validate_url(url):
-            QMessageBox.warning(self, "Input Error", "Please enter a valid URL.")
+            QMessageBox.warning(self, "Input Error", "Please enter a valid URL")
             return
 
-        # Validate save path
-        if not save_path or not Path(save_path).exists():
-            QMessageBox.warning(self, "Input Error", "Please select a valid download path.")
-            return
+        # Create download configuration
+        config = DownloadConfig(
+            url=url,
+            save_path=save_path,
+            format_type='video' if self.video_radio.isChecked() else 'audio',
+            quality=self.get_selected_quality(),
+            playlist=self.playlist_check.isChecked(),
+            start_index=self.start_index.value(),
+            end_index=self.end_index.value() if self.playlist_check.isChecked() else None,
+            subtitle_langs=[self.subtitle_combo.currentText()] if self.subtitle_check.isChecked() else None,
+            thumbnail=self.thumbnail_check.isChecked(),
+            metadata=self.metadata_check.isChecked()
+        )
 
-        # Prepare download options
-        format_options = {
-            'type': 'video' if self.video_radio.isChecked() else 'audio',
-            'quality': self.get_selected_quality()
-        }
-
-        # Disable download button during download
+        # Update UI state
         self.download_button.setEnabled(False)
+        self.cancel_button.setEnabled(True)
+        self.progress_bar.setValue(0)
         self.progress_log.clear()
+        self.status_label.setText("Starting download...")
 
         # Start download worker
-        self.download_worker = VideoDownloadWorker(url, save_path, format_options)
+        self.download_worker = EnhancedDownloadWorker(config, self.settings)
         self.download_worker.progress_signal.connect(self.update_progress)
         self.download_worker.download_complete.connect(self.download_finished)
+        self.download_worker.playlist_info_signal.connect(self.show_playlist_info)
         self.download_worker.start()
 
+        # Save settings
+        self.save_settings()
+
     def get_selected_quality(self) -> str:
-        """Map UI quality selection to yt-dlp format"""
+        """Get selected quality setting"""
         quality_text = self.quality_combo.currentText()
         if self.video_radio.isChecked():
             quality_map = {
                 'Best Quality': 'best',
                 'High (1080p)': 'high',
-                'Medium (720p)': 'medium', 
-                'Low (360p)': 'low'
+                'Medium (720p)': 'medium',
+                'Low (480p)': 'low'
             }
             return quality_map.get(quality_text, 'best')
         else:
-            return quality_text.lower()
+            return quality_text.split()[0]  # Get first word (MP3, WAV, etc.)
 
-    def update_progress(self, message: str):
-        """Update progress log"""
-        self.progress_log.append(message)
+    def update_progress(self, progress: dict):
+        """Update download progress"""
+        if progress['status'] == 'downloading':
+            self.status_label.setText(f"Downloading: {progress['filename']}")
+            self.progress_log.append(
+                f"Speed: {progress['speed']} | ETA: {progress['eta']}"
+            )
+            
+            if progress['total_bytes'] > 0:
+                percent = (progress['downloaded_bytes'] / progress['total_bytes']) * 100
+                self.progress_bar.setValue(int(percent))
+                
+        elif progress['status'] == 'processing':
+            self.status_label.setText(f"Processing: {progress['filename']}")
+            self.progress_log.append("Processing download...")
 
-    def download_finished(self, success: bool):
+    def show_playlist_info(self, info: dict):
+        """Display playlist information"""
+        self.progress_log.append(
+            f"Playlist: {info['title']}\n"
+            f"Total videos: {info['total_entries']}\n"
+        )
+
+    def cancel_download(self):
+        """Cancel ongoing download"""
+        if self.download_worker:
+            self.download_worker.cancel()
+            self.status_label.setText("Download cancelled")
+            self.cancel_button.setEnabled(False)
+
+    def download_finished(self, success: bool, message: str):
         """Handle download completion"""
         self.download_button.setEnabled(True)
+        self.cancel_button.setEnabled(False)
+        
         if success:
-            QMessageBox.information(self, "Success", "Download completed successfully!")
+            self.status_label.setText("Download completed successfully")
+            self.tray_icon.showMessage(
+                "Download Complete",
+                "Your download has finished successfully",
+                QSystemTrayIcon.MessageIcon.Information
+            )
         else:
-            QMessageBox.warning(self, "Error", "Download failed. Check the log for details.")
+            self.status_label.setText("Download failed")
+            self.progress_log.append(f"Error: {message}")
+            self.tray_icon.showMessage(
+                "Download Failed",
+                message,
+                QSystemTrayIcon.MessageIcon.Critical
+            )
+
+    def closeEvent(self, event):
+        """Handle application close event"""
+        self.save_settings()
+        event.accept()
 
 def main():
-    """Main application entry point"""
+    """Application entry point"""
     app = QApplication(sys.argv)
-    frontend = YTDLPFrontend()
+    
+    # Set application info
+    app.setApplicationName("Modern YT-DLP Downloader")
+    app.setApplicationVersion("1.0.0")
+    app.setOrganizationName("YTDLPGui")
+    
+    # Create and show main window
+    frontend = ModernYTDLPFrontend()
     frontend.show()
+    
     sys.exit(app.exec())
 
 if __name__ == '__main__':
