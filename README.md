@@ -1,4 +1,4 @@
-# Modern YT-DLP GUI
+# YTDL-GUI
 
 A modern, feature-rich graphical user interface for yt-dlp, built with PyQt6. This application provides an intuitive way to download videos and audio from various platforms with advanced configuration options.
 
