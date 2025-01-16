@@ -26,7 +26,6 @@ from slugify import slugify
 
 @dataclass
 class ModernThemeManager:
-    """Enhanced theme manager with modern color schemes"""
     THEMES = {
         'light': {
             'window': QColor("#FFFFFF"),
@@ -62,7 +61,6 @@ class ModernThemeManager:
         self._current_theme = self.settings.value('theme', 'light')
 
     def get_palette(self, theme_name: str = None) -> QPalette:
-        """Generate enhanced color palette"""
         theme_name = theme_name or self._current_theme
         theme = self.THEMES[theme_name]
         palette = QPalette()
@@ -93,7 +91,6 @@ class ModernThemeManager:
         return new_theme
 
 class ModernYTDLPFrontend(QMainWindow):
-    """Modern and feature-rich yt-dlp frontend"""
     def __init__(self):
         super().__init__()
         self.download_worker = None
@@ -422,7 +419,7 @@ class ModernYTDLPFrontend(QMainWindow):
             return quality_text.split()[0]  # Get first word (MP3, WAV, etc.)
 
     def update_progress(self, progress: dict):
-        """Update download progress"""
+        """Updates download progress"""
         if progress['status'] == 'downloading':
             self.status_label.setText(f"Downloading: {progress['filename']}")
             self.progress_log.append(
@@ -438,21 +435,21 @@ class ModernYTDLPFrontend(QMainWindow):
             self.progress_log.append("Processing download...")
 
     def show_playlist_info(self, info: dict):
-        """Display playlist information"""
+        """Displays playlist information"""
         self.progress_log.append(
             f"Playlist: {info['title']}\n"
             f"Total videos: {info['total_entries']}\n"
         )
 
     def cancel_download(self):
-        """Cancel ongoing download"""
+        """Cancels ongoing download"""
         if self.download_worker:
             self.download_worker.cancel()
             self.status_label.setText("Download cancelled")
             self.cancel_button.setEnabled(False)
 
     def download_finished(self, success: bool, message: str):
-        """Handle download completion"""
+        """Handles download completion"""
         self.download_button.setEnabled(True)
         self.cancel_button.setEnabled(False)
         
@@ -473,7 +470,7 @@ class ModernYTDLPFrontend(QMainWindow):
             )
 
     def closeEvent(self, event):
-        """Handle application close event"""
+        """Handles application close event"""
         self.save_settings()
         event.accept()
 
@@ -486,7 +483,7 @@ def main():
     app.setApplicationVersion("1.0.0")
     app.setOrganizationName("YTDLPGui")
     
-    # Create and show main window
+    # Creates and shows main window
     frontend = ModernYTDLPFrontend()
     frontend.show()
     

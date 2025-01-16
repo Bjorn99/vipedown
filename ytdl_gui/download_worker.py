@@ -156,7 +156,6 @@ class EnhancedDownloadWorker(QThread):
             return quality_text.split('(')[0].strip().lower()  # Get format name (FLAC, WAV, etc.)
 
     def _get_video_format(self) -> str:
-        """Get video format string based on quality settings"""
         quality = self.config.quality
         quality_map = {
             'Maximum Quality (8K/4K)': self._get_max_quality_format(),
@@ -179,7 +178,6 @@ class EnhancedDownloadWorker(QThread):
         return format_str
 
     def _get_max_quality_format(self) -> str:
-        """Generate format string for maximum quality"""
         # For selecting the best quality available regardless of codec
         base_format = 'bestvideo+bestaudio/best'
         

@@ -50,7 +50,6 @@ class SettingsDialog(QDialog):
         layout.addLayout(button_layout)
 
     def create_general_tab(self) -> QWidget:
-        """Creating general settings tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
@@ -145,7 +144,6 @@ class SettingsDialog(QDialog):
         return tab
 
     def create_audio_tab(self) -> QWidget:
-        """Create audio settings tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
@@ -197,7 +195,6 @@ class SettingsDialog(QDialog):
         return tab
 
     def create_advanced_tab(self) -> QWidget:
-        """Create advanced settings tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
@@ -379,7 +376,6 @@ class SettingsDialog(QDialog):
         )
 
     def save_settings(self):
-        """Save all settings"""
         # General settings
         self.settings.setValue('save_path', self.default_path.text())
         self.settings.setValue('check_updates', self.check_updates.isChecked())
