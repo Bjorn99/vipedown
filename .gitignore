@@ -407,6 +407,8 @@ build/
 dist/
 *.egg-info/
 *.egg
+*.tar.gz
+*.pkg.tar.zst
 
 # Virtual environment
 venv/
