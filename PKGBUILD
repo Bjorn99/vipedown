@@ -1,41 +1,51 @@
-# Maintainer: Your Name <your-email@example.com>
-
-pkgname=ytdl-gui
+# Maintainer: Bjorn99 <67769176+Bjorn99@users.noreply.github.com>
+pkgname=vipedown
 pkgver=0.1.0
 pkgrel=1
-pkgdesc="A modern graphical user interface for yt-dlp"
+pkgdesc="Fast and efficient video downloader for Linux"
 arch=('any')
-url="https://github.com/Bjorn99/ytdl-gui"
+url="https://github.com/Bjorn99/vipedown"
 license=('MIT')
 depends=(
-    'python'
+    'python>=3.10'
     'python-pyqt6'
-    'python-yt-dlp'
-    'python-slugify'
-    'python-validators'
+    'ffmpeg'
+    'yt-dlp'
+    'python-pip'
 )
 makedepends=(
-    'python-poetry'
     'python-build'
     'python-installer'
     'python-wheel'
+    'python-poetry'
 )
-source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('bac8792ac97e0701c2314e17c041061e1eedc363101605ee80a8d242e11d96ef' '56ba47c97150fafa4dd65e46fb168a1bc74eda7ae9c6924bf5e9d725c6cec1d7' 'c2c59285c2746d19da2179ea5839e31b9be0afd5852acf2f6047c7f36c404ad7')  # Replace with actual checksum after first build
+provides=('vipedown')
+options=(!strip)
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$pkgname-$pkgver"
+    python -m build --wheel --no-isolation
+}
 
 package() {
-    cd "$srcdir/$pkgname-$pkgver"
+    cd "$pkgname-$pkgver"
     
-    # Use poetry to build and install
-    poetry build -f wheel
     python -m installer --destdir="$pkgdir" dist/*.whl
-
-    # Install LICENSE
-    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
-
-    # Install desktop entry
-    install -Dm644 ytdl-gui.desktop "$pkgdir/usr/share/applications/ytdl-gui.desktop"
-
+    
+    # Create bin directory and install executable
+    install -Dm755 -d "$pkgdir/usr/bin"
+    echo '#!/bin/sh' > "$pkgdir/usr/bin/vipedown"
+    echo 'exec python -m vipedown "$@"' >> "$pkgdir/usr/bin/vipedown"
+    chmod 755 "$pkgdir/usr/bin/vipedown"
+    
+    # Install desktop file
+    install -Dm644 "resources/vipedown.desktop" "$pkgdir/usr/share/applications/vipedown.desktop"
+    
     # Install icon
-    install -Dm644 icon.png "$pkgdir/usr/share/pixmaps/ytdl-gui.png"
+    install -Dm644 "resources/vipedown.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/vipedown.png"
+    
+    # Install license
+    install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

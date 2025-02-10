@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=YT-DLP GUI
-Comment=Download videos and audio from YouTube
-Exec=ytdl-gui
-Icon=ytdl-gui
-Categories=Utility;Video;AudioVideo;
-Terminal=false

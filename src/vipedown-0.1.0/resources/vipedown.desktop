@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=VipeDown
+GenericName=Video Downloader
+Comment=Fast and efficient video downloader for Linux
+Exec=vipedown
+Icon=vipedown
+Terminal=false
+Categories=Network;VideoTools;
+Keywords=youtube;video;download;
+StartupWMClass=vipedown

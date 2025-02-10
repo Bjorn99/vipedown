@@ -2,10 +2,6 @@
 
 A fast, efficient video downloader for Linux systems built with PyQt6. VipeDown emphasizes functionality over aesthetics, providing a reliable way to download videos and audio from various platforms.
 
-<div align="center">
-  <img src="resources/vipedown.png" alt="VipeDown Logo" width="600"/>
-</div>
-
 ## Features
 
 ### Download Management
@@ -193,22 +189,6 @@ When switching from development to system installation:
    ```
 4. Make changes and test
 5. Submit pull request
-
-## Acknowledgements
-
-VipeDown is built upon the work of several amazing open-source projects and tools:
-
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - The core downloading functionality
-- [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) - The GUI framework that powers our interface
-- [FFmpeg](https://ffmpeg.org/) - Essential media processing capabilities
-- [Poetry](https://python-poetry.org/) - Dependency management and packaging
-- [My Free Logo Maker](https://myfreelogomaker.com/) - Tool used for creating our application logo
-
-Special thanks to:
-- The Python community for providing excellent libraries and tools
-- The Arch Linux community for package management guidance
-
-VipeDown is designed specifically for Linux systems, with special attention to Arch Linux and its derivatives.
 
 ## License
 MIT License
