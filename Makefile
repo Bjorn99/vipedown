@@ -4,13 +4,13 @@ VERSION := $(shell grep "^version" pyproject.toml | cut -d'"' -f2)
 DIST_NAME := vipedown-$(VERSION)
 
 prepare:
-	cd .. && tar -czf VipeDown/$(DIST_NAME).tar.gz \
-		--transform 's,^VipeDown,$(DIST_NAME),' \
-		VipeDown/vipedown \
-		VipeDown/pyproject.toml \
-		VipeDown/README.md \
-		VipeDown/LICENSE \
-		VipeDown/resources
+	tar -czf $(DIST_NAME).tar.gz \
+		--transform 's,^,$(DIST_NAME)/,' \
+		vipedown \
+		pyproject.toml \
+		README.md \
+		LICENSE \
+		resources
 
 build: prepare
 	makepkg -f

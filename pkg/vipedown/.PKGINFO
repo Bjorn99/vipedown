@@ -3,12 +3,12 @@
 pkgname = vipedown
 pkgbase = vipedown
 xdata = pkgtype=pkg
-pkgver = 0.1.0-1
+pkgver = 0.1.1-1
 pkgdesc = Fast and efficient video downloader for Linux
 url = https://github.com/Bjorn99/vipedown
-builddate = 1739152764
+builddate = 1739158232
 packager = Unknown Packager
-size = 226500
+size = 227402
 arch = any
 license = MIT
 provides = vipedown

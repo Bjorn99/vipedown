@@ -1,6 +1,6 @@
 # Maintainer: Bjorn99 <67769176+Bjorn99@users.noreply.github.com>
 pkgname=vipedown
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc="Fast and efficient video downloader for Linux"
 arch=('any')

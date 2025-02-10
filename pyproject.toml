@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "vipedown"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fast and efficient video downloader for Linux systems"
 authors = ["Bjorn99 <67769176+Bjorn99@users.noreply.github.com>"]
 license = "MIT"
